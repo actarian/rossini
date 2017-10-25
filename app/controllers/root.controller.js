@@ -9,11 +9,38 @@
 
         var OBJECTS = {};
 
+        var downloadFile = function downloadFile() {
+            var a = document.createElement("a");
+            document.body.appendChild(a);
+            a.style = "display: none";
+            return function(data, fileName, json, pretty) {
+                if (json) {
+                    if (pretty) {
+                        data = JSON.stringify(data, null, 2); // spacing level = 2
+                    } else {
+                        data = JSON.stringify(data);
+                    }
+                }
+                var blob = new Blob([data], { type: "octet/stream" }),
+                    url = window.URL.createObjectURL(blob);
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            };
+        }();
+
         Number.prototype.mod = function(n) {
             return ((this % n) + n) % n;
         };
 
         var options = {
+            colors: {
+                background: 0xeae8e8,
+                lines: 0x3353a4,
+                overLines: 0xb4bfdd,
+                notes: 0x3353a4,
+            },
             cameraHeight: 33,
             targetHeight: 39,
             camera: {
@@ -25,11 +52,6 @@
             },
             audioUrl: "audio/rossini-192.mp3",
             audioVolume: 1.0,
-            colors: {
-                background: 0x111111, // 0xffffff,
-                lines: 0x999999, // 0x888888,
-                notes: 0x444444, // 0xaaaaaa,
-            },
             bands: 128,
             points: 128,
             lines: 32,
@@ -53,6 +75,10 @@
                         c.setValue(c.__color.hex);
                     }
                 }
+            },
+            saveJson: function() {
+                console.log('saveJson');
+                downloadFile(stepper.steps, 'rossini.js', true, true);
             }
         };
 
@@ -72,7 +98,7 @@
                     },
                     circle: {
                         position: new THREE.Vector3(60, 60, 0),
-                        texture: 'img/rossini-01.jpg',
+                        texture: 'img/rossini-01.png',
                     }
                 };
             });
@@ -362,7 +388,7 @@
             });
 
             var material2 = new THREE.LineBasicMaterial({
-                color: 0xffffff,
+                color: options.colors.overLines,
             });
 
             var resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
@@ -408,8 +434,9 @@
             texture.wrapT = THREE.RepeatWrapping;
             texture.repeat.set(1, 1);
             var material = new THREE.MeshBasicMaterial({
-                color: options.colors.lines,
+                color: 0xffffff,
                 map: texture,
+                transparent: true,
             });
 
             /*
@@ -671,9 +698,8 @@
             function updateMaterial() {
                 material.color.setHex(options.colors.lines);
                 material1.color.setHex(options.colors.lines);
+                material2.color.setHex(options.colors.overLines);
             }
-
-            console.log(object);
 
             return {
                 add: add,
@@ -920,13 +946,16 @@
             circlePosition.add(options.circle.position, 'x', -300, 300).onChange(onChangePositions);
             circlePosition.add(options.circle.position, 'y', -300, 300).onChange(onChangePositions);
             circlePosition.add(options.circle.position, 'z', -300, 300).onChange(onChangePositions);
-            gui.addColor(options.colors, 'background').onChange(onChange);
-            gui.addColor(options.colors, 'lines').onChange(onChange);
+            var colors = gui.addFolder('colors');
+            colors.addColor(options.colors, 'background').onChange(onChange);
+            colors.addColor(options.colors, 'lines').onChange(onChange);
+            colors.addColor(options.colors, 'overLines').onChange(onChange);
             gui.add(options, 'audioVolume', 0.01, 1.0).onChange(onChange);
             gui.add(options, 'audioStrength', 10, 100).onChange(onChange);
             gui.add(options, 'noiseStrength', 10, 100).onChange(onChange);
             gui.add(options, 'circularStrength', 0.01, 0.90).onChange(onChange);
             gui.add(options, 'randomize');
+            gui.add(options, 'saveJson');
             return gui;
         }
 

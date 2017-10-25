@@ -61,6 +61,51 @@
             return ((this % n) + n) % n;
         };
 
+        var options = {
+            cameraHeight: 33,
+            targetHeight: 39,
+            camera: {
+                position: new THREE.Vector3(),
+                target: new THREE.Vector3(),
+            },
+            circle: {
+                position: new THREE.Vector3(),
+            },
+            audioUrl: "audio/rossini-192.mp3",
+            audioVolume: 1.0,
+            colors: {
+                background: 0x111111, // 0xffffff,
+                lines: 0x999999, // 0x888888,
+                notes: 0x444444, // 0xaaaaaa,
+            },
+            bands: 128,
+            points: 128,
+            lines: 32,
+            radius: 200,
+            audioStrength: 100,
+            noiseStrength: 25,
+            circularStrength: 0.90,
+            randomize: function() {
+                for (var i = 0; i < gui.__controllers.length; i++) {
+                    var c = gui.__controllers[i];
+                    if (c.__min) {
+                        var value = c.__min + (c.__max - c.__min) * Math.random();
+                        this[c.property] = value;
+                        c.updateDisplay();
+                    }
+                    if (c.__color) {
+                        c.__color.r = Math.floor(Math.random() * 255);
+                        c.__color.g = Math.floor(Math.random() * 255);
+                        c.__color.b = Math.floor(Math.random() * 255);
+                        c.updateDisplay();
+                        c.setValue(c.__color.hex);
+                    }
+                }
+            }
+        };
+
+        options.noiseMap = getPerlinNoise(options.points, options.lines);
+
         function getStepper() {
             var stepper = {
                 pow: 0,
@@ -68,7 +113,16 @@
             };
 
             var steps = new Array(24).fill().map(function(v, i) {
-                return i + 1;
+                return {
+                    camera: {
+                        position: new THREE.Vector3(),
+                        target: new THREE.Vector3(),
+                    },
+                    circle: {
+                        position: new THREE.Vector3(60, 60, 0),
+                        texture: 'img/rossini-01.jpg',
+                    }
+                };
             });
 
             var current = 0;
@@ -93,6 +147,11 @@
             function setStep(index) {
                 var previous = stepper.current || 0;
                 stepper.current = index;
+                var step = steps[index];
+                options.camera.position.copy(step.camera.position);
+                options.camera.target.copy(step.camera.target);
+                options.circle.position.copy(step.circle.position);
+
                 var circle = OBJECTS.circles[index] || getObjectCircles(index);
                 circle.add();
                 OBJECTS.circles[index] = circle;
@@ -122,11 +181,17 @@
                 // current = current % steps.length;
                 setStep(current);
             }
+
+            function getCurrentStep() {
+                return steps[current];
+            }
+
             return angular.extend(stepper, {
                 steps: steps,
                 current: current,
                 next: next,
                 previous: previous,
+                getCurrentStep: getCurrentStep,
             });
         }
 
@@ -137,46 +202,6 @@
         var stats, gui, scene, camera, fov, ratio, near, far, shadow, back, light, renderer, container, width, height, w2, h2, mouse = { x: 0, y: 0 };
         var controls = null;
 
-        var options = {
-            audioUrl: "audio/rossini-192.mp3",
-            audioVolume: 0.5,
-            colors: {
-                background: 0x111111, // 0xffffff,
-                lines: 0x999999, // 0x888888,
-                notes: 0x444444, // 0xaaaaaa,
-            },
-            bands: 256,
-            rows: 128,
-            space: 10,
-            audioStrength: 60,
-            noiseStrength: 25,
-            circularStrength: 0.90,
-            display: '0',
-            randomize: function() {
-                for (var i = 0; i < gui.__controllers.length; i++) {
-                    var c = gui.__controllers[i];
-                    if (c.__min) {
-                        var value = c.__min + (c.__max - c.__min) * Math.random();
-                        this[c.property] = value;
-                        c.updateDisplay();
-                    }
-                    if (c.__color) {
-                        c.__color.r = Math.floor(Math.random() * 255);
-                        c.__color.g = Math.floor(Math.random() * 255);
-                        c.__color.b = Math.floor(Math.random() * 255);
-                        c.updateDisplay();
-                        c.setValue(c.__color.hex);
-                    }
-                }
-            }
-        };
-
-        options.points = new Array(options.bands * 2).fill(null).map(function() {
-            var r = 1000,
-                d = r * 2;
-            return new THREE.Vector3(-r + Math.random() * d, -r + Math.random() * d, -r + Math.random() * d);
-        });
-        options.noiseMap = getPerlinNoise(options.rows, options.rows);
 
         function onChange(params) {
             // renderer.setClearColor(options.colors.background, 1);
@@ -187,39 +212,20 @@
             console.log('backgroundColor', backgroundColor);
             document.body.style.backgroundColor = '#' + backgroundColor;
             if (OBJECTS.ribbon) {
-                OBJECTS.ribbon.setMaterial();
+                OBJECTS.ribbon.updateMaterial();
             }
             angular.forEach(OBJECTS.circles, function(circle) {
                 if (circle) {
-                    circle.material.color.setHex(options.colors.lines);
+                    circle.updateMaterial();
                 }
             });
-            /*
-            if (OBJECTS.circles) {
-                OBJECTS.circles.material.color.setHex(options.colors.lines);
-                if (options.display === '0') {
-                    OBJECTS.circles.add();
-                } else {
-                    OBJECTS.circles.remove();
-                }
-            }
-            */
-            if (OBJECTS.lines) {
-                OBJECTS.lines.material.color.setHex(options.colors.lines);
-                if (options.display === '1') {
-                    OBJECTS.lines.add();
-                } else {
-                    OBJECTS.lines.remove();
-                }
-            }
-            if (OBJECTS.dots) {
-                OBJECTS.dots.material.color.setHex(options.colors.lines);
-                if (options.display === '2') {
-                    OBJECTS.dots.add();
-                } else {
-                    OBJECTS.dots.remove();
-                }
-            }
+        }
+
+        function onChangePositions(params) {
+            var step = stepper.getCurrentStep();
+            step.camera.position.copy(options.camera.position);
+            step.camera.target.copy(options.camera.target);
+            step.circle.position.copy(options.circle.position);
         }
 
         function createLights() {
@@ -273,131 +279,6 @@
             // controls = new THREE.OrbitControls(camera, renderer.domElement);
         }
 
-        function animateVertexAtIndex(v, i, d) {
-            var rows = options.rows,
-                audioStrength = options.audioStrength,
-                noiseStrength = options.noiseStrength;
-            var r = Math.floor(i / rows);
-            var c = i - r * rows;
-            var b = Math.abs(c - rows / 2) * 2;
-            var dr = 1 - (Math.abs(r - rows / 2) / (rows / 2));
-            var dc = 1 - (Math.abs(c - rows / 2) / (rows / 2));
-            var drc = (dr + dc) / 2;
-            var index = b % options.bands;
-            var pow = analyserData[index];
-            var scale = (pow / options.bands) * dr * 2;
-            var ni = r * rows + ((c + d) % rows);
-            var level = (options.noiseMap[ni] / 64 * noiseStrength) * drc + (audioStrength * scale);
-            v.z += (level - v.z) / (3 + 3 * Math.max(0.000001, 1 - drc));
-        }
-
-        function getObjectTube() {
-            var options = {
-                path: spline,
-                tubularSegments: 500,
-                radius: 1,
-                radiusSegments: 2,
-                closed: true,
-            }
-            var spline = new THREE.CatmullRomCurve3([
-                new THREE.Vector3(-400, -400, 0),
-                new THREE.Vector3(400, -400, 0),
-                new THREE.Vector3(1400, -400, 0),
-                new THREE.Vector3(400, 400, 0),
-                new THREE.Vector3(-400, 400, 0)
-            ]);
-            spline.type = 'catmullrom';
-            spline.closed = true;
-
-            var object = new THREE.Object3D();
-            scene.add(object);
-
-            var material = new THREE.MeshLambertMaterial({
-                color: 0xffffff
-            });
-            var geometry = new THREE.TubeBufferGeometry(spline, options.tubularSegments, options.radius, options.radiusSegments, options.closed);
-            var group = new THREE.Mesh(geometry, material);
-            object.add(group);
-
-            // if (group !== undefined) {
-            //     object.remove(group);
-            //     group.children[0].geometry.dispose();
-            //     group.children[1].geometry.dispose();
-            // }            
-
-            /*
-            var geometry = new THREE.Geometry();
-            geometry.vertices = spline.getPoints(500);
-            var line = new MeshLine();
-            line.setGeometry(geometry);
-            // line.setGeometry( geometry, function( p ) { return 2; } ); // makes width 2 * lineWidth
-            // line.setGeometry( geometry, function( p ) { return 1 - p; } ); // makes width taper
-            // line.setGeometry( geometry, function( p ) { return 2 + Math.sin( 50 * p ); } ); // makes width sinusoidal
-            var material = new MeshLineMaterial({
-                color: new THREE.Color(0xffffff),
-                lineWidth: 4,
-            });
-            var mesh = new THREE.Mesh(line.geometry, material);
-            object.add(mesh);
-            */
-
-            function add() {
-                console.log('OBJECTS.tube.add');
-                scene.add(object);
-            }
-
-            function remove() {
-                console.log('OBJECTS.tube.remove');
-                scene.remove(object);
-            }
-
-            var d = 0; // iterator
-            var a = new THREE.Vector3(); // normal
-            var b = new THREE.Vector3(); // binormal
-
-            function update() {
-                var duration = 20 * 1000;
-                var scale = 1;
-                var offset = 15;
-                var lookAhead = true;
-                var msec = Date.now();
-                var pow = (msec % duration) / duration;
-                var dir = spline.getTangentAt(pow);
-                var tangents = geometry.tangents;
-                var binormals = geometry.binormals;
-                var x = pow * tangents.length;
-                var c = Math.floor(x);
-                var n = (c + 1) % tangents.length;
-                b.subVectors(binormals[n], binormals[c]);
-                b.multiplyScalar(x - c).add(binormals[c]);
-                a.copy(b).cross(dir);
-                var p = spline.getPointAt(pow);
-                p.multiplyScalar(scale);
-                p.add(a.clone().multiplyScalar(offset));
-                camera.position.copy(p);
-                var lookAt;
-                if (lookAhead) {
-                    // using arclength for stablization in look ahead
-                    lookAt = spline.getPointAt((pow + 30 / spline.getLength()) % 1).multiplyScalar(scale);
-                } else {
-                    // camera orientation 2 - up orientation via normal
-                    lookAt = new THREE.Vector3().copy(p).add(dir);
-                }
-                camera.matrix.lookAt(camera.position, lookAt, a);
-                camera.rotation.setFromRotationMatrix(camera.matrix, camera.rotation.order);
-                d++;
-            }
-
-            return {
-                object: object,
-                spline: spline,
-                geometry: geometry,
-                add: add,
-                remove: remove,
-                update: update,
-            };
-        }
-
         function getRandomRange(min, max, allowNegatives) {
             var n = -1 + Math.random() * 2;
             var a = Math.abs(n);
@@ -407,16 +288,6 @@
 
         function getObjectRibbon() {
             var material = getMaterial();
-
-            /*
-            var points = [
-                new THREE.Vector3(-2000, 0, -2000),
-                new THREE.Vector3(2000, 0, -2000),
-                new THREE.Vector3(4000, 0, -2000),
-                new THREE.Vector3(2000, 0, 2000),
-                new THREE.Vector3(-2000, 0, 2000)
-            ];
-            */
 
             var prev = new THREE.Vector3();
             var points = new Array(12).fill(null).map(function() {
@@ -431,19 +302,21 @@
             spline.type = 'catmullrom';
             // spline.closed = true;
 
-            var cameraHeight = 30;
+            /*
+            var cameraHeight = options.cameraHeight;
             var cameraSpline = new THREE.CatmullRomCurve3(spline.points.map(function(p) {
                 return new THREE.Vector3(p.x, p.y + cameraHeight, p.z);
             }));
             cameraSpline.type = 'catmullrom';
             // cameraSpline.closed = true;
 
-            var targetHeight = 15;
+            var targetHeight = options.targetHeight;
             var targetSpline = new THREE.CatmullRomCurve3(spline.points.map(function(p) {
                 return new THREE.Vector3(p.x, p.y + targetHeight, p.z);
             }));
             targetSpline.type = 'catmullrom';
             // targetSpline.closed = true;
+            */
 
             var geometry = new THREE.Geometry();
             geometry.vertices = spline.getPoints(1200);
@@ -476,8 +349,15 @@
                 var cpow = stepper.pow;
                 var tpow = (cpow + c).mod(1);
 
-                var position = cameraSpline.getPointAt(cpow);
-                var target = targetSpline.getPointAt(tpow);
+                var position = spline.getPointAt(cpow);
+                position.y += options.cameraHeight;
+
+                var target = spline.getPointAt(tpow);
+                target.y += options.targetHeight;
+
+                var step = stepper.getCurrentStep();
+                position.add(step.camera.position);
+                target.add(step.camera.target);
 
                 camera.position.copy(position);
                 camera.target.copy(target);
@@ -488,20 +368,22 @@
                 var resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
                 return new MeshLineMaterial({
                     color: new THREE.Color(options.colors.lines),
-                    lineWidth: 4,
+                    lineWidth: 5,
+                    depthTest: true,
+                    /*
                     opacity: 1,
                     resolution: resolution,
                     sizeAttenuation: 1,
                     near: 1,
                     far: 1000,
-                    depthTest: false,
                     blending: THREE.AdditiveBlending,
                     transparent: false,
                     side: THREE.DoubleSide,
+                    */
                 });
             }
 
-            function setMaterial() {
+            function updateMaterial() {
                 // !!! non va bene
                 OBJECTS.ribbon.material = getMaterial();
                 OBJECTS.ribbon.object.material = OBJECTS.ribbon.material;
@@ -510,59 +392,107 @@
             return {
                 object: object,
                 spline: spline,
-                cameraSpline: cameraSpline,
-                targetSpline: targetSpline,
                 geometry: geometry,
                 material: material,
                 add: add,
                 remove: remove,
                 update: update,
-                setMaterial: setMaterial,
+                updateMaterial: updateMaterial,
             };
         }
 
         function getObjectCircles(index) {
-            var geometry, material, object, circles = [];
+            var geometry, object, circles = [];
+
+            // materials
+            var material1 = new THREE.LineBasicMaterial({
+                color: options.colors.lines,
+            });
+
+            var material2 = new THREE.LineBasicMaterial({
+                color: 0xffffff,
+            });
+
+            var resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
+
+            var meshLineMaterial1 = new MeshLineMaterial({
+                color: new THREE.Color(options.colors.lines),
+                lineWidth: 1,
+                depthTest: true,
+                /*
+                opacity: 1,
+                resolution: resolution,
+                sizeAttenuation: 1,
+                near: 1,
+                far: 1000,
+                blending: THREE.AdditiveBlending,
+                transparent: false,
+                side: THREE.DoubleSide,
+                */
+            });
+
+            var meshLineMaterial2 = new MeshLineMaterial({
+                color: new THREE.Color(0xffffff),
+                lineWidth: 1,
+                depthTest: true,
+                /*
+                opacity: 1,
+                resolution: resolution,
+                sizeAttenuation: 1,
+                near: 1,
+                far: 1000,
+                blending: THREE.AdditiveBlending,
+                transparent: false,
+                side: THREE.DoubleSide,
+                */
+            });
 
             object = new THREE.Object3D();
 
-            geometry = new THREE.IcosahedronGeometry(90, 3); // radius, detail
-            material = new THREE.MeshBasicMaterial({
-                color: 0xffff00,
+            // sphere
+            var step = stepper.steps[index];
+            var texture = new THREE.TextureLoader().load(step.circle.texture);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(1, 1);
+            var material = new THREE.MeshBasicMaterial({
+                color: options.colors.lines,
+                map: texture,
             });
+
+            /*
+            geometry = new THREE.IcosahedronGeometry(options.radius - 5, 3); // radius, detail
             var sphere = new THREE.Mesh(geometry, material);
+            sphere.scale.z = 0.001;
             object.add(sphere);
+            */
 
-            material = new THREE.LineBasicMaterial({
-                color: options.colors.lines
-            });
+            geometry = new THREE.PlaneGeometry(options.radius * 2 - 20, options.radius * 2 - 20, 8, 8);
+            var plane = new THREE.Mesh(geometry, material);
+            object.add(plane);
+            // sphere
 
-            var rows = options.rows,
-                space = options.space;
-            while (circles.length < options.rows) {
-                geometry = new THREE.Geometry();
-                var circle = new THREE.LineLoop(geometry, material);
-                circle.points = new Array(rows).fill(null);
-                // var spline = new THREE.CatmullRomCurve3(points);
-                // circle.spline = spline;
-                circles.push(circle);
-                object.add(circle);
-            }
-            var points = new Array(rows * rows).fill(null).map(function(n, i) {
-                var r = Math.floor(i / rows);
-                var c = i - r * rows;
-                var angle = 2 * Math.PI / rows;
-                var rad = angle * r + angle * c * 0.1;
-                var point = new THREE.Vector3();
-                point.r = {
-                    x: Math.cos(rad),
-                    y: Math.sin(rad),
-                    z: 96 + (c * c * c * 0.0001),
-                };
-                circles[c].points[r] = point;
-                circles[c].geometry.vertices.push(point);
-                return point;
-            });
+            var points1 = [],
+                points2 = [],
+                meshLines1 = [],
+                meshLines2 = [],
+                meshLineGeometries1 = [],
+                meshLineGeometries2 = [],
+                useMeshLines = false;
+
+            var pn = options.points,
+                ln = options.lines;
+
+            var group1 = new THREE.Object3D();
+            object.add(group1);
+
+            var group2 = new THREE.Object3D();
+            object.add(group2);
+
+            var lines1 = new Array(ln).fill(null).map(getLine1);
+            var lines2 = new Array(ln).fill(null).map(getLine2);
+
+            // console.log('lines2', lines2[lines2.length - 1].geometry.vertices[0]);
 
             var state = {
                 pow: 0,
@@ -612,210 +542,347 @@
                 });
             }
 
-            var d = 0;
+            var iterator = 0;
+
+            function getLine1(v, i) {
+                var geometry = new THREE.Geometry();
+                var points = addPoints(geometry, i, 1);
+                var line = null;
+                if (useMeshLines) {
+                    var meshLine = new MeshLine();
+                    meshLine.setGeometry(geometry);
+                    meshLineGeometries1.push(geometry);
+                    meshLines1.push(meshLine);
+                    // meshLine.setGeometry( geometry, function( p ) { return 2; } ); // makes width 2 * lineWidth
+                    // meshLine.setGeometry( geometry, function( p ) { return 1 - p; } ); // makes width taper
+                    // meshLine.setGeometry( geometry, function( p ) { return 2 + Math.sin( 50 * p ); } ); // makes width sinusoidal
+                    line = new THREE.Mesh(meshLine.geometry, meshLineMaterial1);
+                } else {
+                    line = new THREE.LineLoop(geometry, material1);
+                }
+                points1.push(points);
+                // var spline = new THREE.CatmullRomCurve3(points);
+                // circle.spline = spline;
+                group1.add(line);
+                return line;
+            }
+
+            function getLine2(v, i) {
+                var geometry = new THREE.Geometry();
+                var points = addPoints(geometry, i, 2);
+                var line = null;
+                if (useMeshLines) {
+                    var meshLine = new MeshLine();
+                    meshLine.setGeometry(geometry);
+                    meshLineGeometries2.push(geometry);
+                    meshLines2.push(meshLine);
+                    // meshLine.setGeometry( geometry, function( p ) { return 2; } ); // makes width 2 * lineWidth
+                    // meshLine.setGeometry( geometry, function( p ) { return 1 - p; } ); // makes width taper
+                    // meshLine.setGeometry( geometry, function( p ) { return 2 + Math.sin( 50 * p ); } ); // makes width sinusoidal                    
+                    line = new THREE.Mesh(meshLine.geometry, meshLineMaterial2);
+                } else {
+                    line = new THREE.LineLoop(geometry, material2);
+                }
+                points2.push(points);
+                // var spline = new THREE.CatmullRomCurve3(points);
+                // circle.spline = spline;
+                group2.add(line);
+                return line;
+            }
+
+            function addPoints(geometry, l, g) {
+                var points = new Array(pn).fill(null).map(function(v, i) {
+                    var ratio = i / pn;
+                    var degrees = 360 * ratio; // point degrees;
+                    degrees += 60 * index; // circle offset;
+                    degrees += 30 * g; // group offset;
+                    degrees += (360 / pn * 0.1) * l; // line offset;
+                    var radians = degrees * Math.PI / 180;
+                    var radius = options.radius;
+                    var increment = 0;
+                    if (g === 1) {
+                        increment += (l * l * l * 0.005);
+                    } else {
+                        increment += (l * l * l * 0.005);
+                    }
+                    v = new THREE.Vector3();
+                    v.sincos = {
+                        base: radius,
+                        increment: increment,
+                        radius: radius,
+                        x: Math.cos(radians),
+                        y: Math.sin(radians),
+                    };
+                    geometry.vertices.push(v);
+                    return v;
+                });
+                return points;
+            }
+
+            function updateLine(geometry, vertices, l, g) {
+                var audioStrength = options.audioStrength,
+                    noiseStrength = options.noiseStrength,
+                    circularStrength = options.circularStrength,
+                    data = analyserData;
+
+                angular.forEach(vertices, function(v, i) {
+                    var aia = i % options.bands;
+                    var aib = (pn - 1 - i) % options.bands;
+                    var audioPow = ((data[aia] + data[aib]) / 2) / options.bands;
+                    // var audioPow = data[aia] / options.bands;
+
+                    var nd = g === 1 ? 0 : 64;
+                    var nia = l * pn + ((i + nd + iterator) % pn);
+                    var nib = l * pn + (((pn - 1 - i - nd) + iterator) % pn);
+                    var noisePow = (options.noiseMap[nia] + options.noiseMap[nib]) / 2 / 64;
+
+                    var linePow = 1 - ((ln - l) / ln * circularStrength);
+
+                    var radius = v.sincos.base +
+                        (v.sincos.increment * noisePow) +
+                        (v.sincos.increment * audioPow) +
+                        (noiseStrength * noisePow) * linePow +
+                        (audioStrength * audioPow) * linePow +
+                        // (audioStrength * (3 - g) * audioPow * (l * 0.1)) * linePow +
+                        0;
+
+                    v.sincos.radius = radius;
+                    // v.sincos.radius += (radius - v.sincos.radius) / 2;
+
+                    v.x = v.sincos.x * v.sincos.radius;
+                    v.y = v.sincos.y * v.sincos.radius;
+                    v.z = 0; // -l;
+                    // console.log(v.sincos.radius);
+                });
+
+                /*
+                var f = 0;
+                var l = pn - 1;
+                var first = new THREE.Vector3().copy(vertices[f]);
+                var last = new THREE.Vector3().copy(vertices[l]);
+                vertices[f].add(new THREE.Vector3().subVectors(first, last).multiplyScalar(0.5));
+                vertices[l].add(new THREE.Vector3().subVectors(first, last).multiplyScalar(-0.5));
+                */
+
+                geometry.verticesNeedUpdate = true;
+
+                /*
+                	lines.forEach( function( l, i ) {
+		if( params.animateWidth ) l.material.uniforms.lineWidth.value = params.lineWidth * ( 1 + .5 * Math.sin( 5 * t + i ) );
+		if( params.autoRotate ) l.rotation.y += .125 * delta;
+      l.material.uniforms.visibility.value= params.animateVisibility ? (time/3000) % 1.0 : 1.0;
+                */
+                /*
+                if (iterator === 60 && g === 2 && l === 0) {
+                    console.log('vertices', geometry.vertices.map(function(v) { return v.x + ',' + v.y; }));
+                }
+                */
+            }
 
             function update() {
-                var rows = options.rows,
-                    audioStrength = options.audioStrength,
-                    noiseStrength = options.noiseStrength,
-                    circularStrength = options.circularStrength;
-                angular.forEach(points, function(v, i) {
-                    // animateVertexAtIndex(v, i, d);
-                    var r = Math.floor(i / rows);
-                    var c = i - r * rows;
-                    var b = Math.abs(c - rows / 2) * 2;
-                    var dr = 1 - (Math.abs(r - rows / 2) / (rows / 2));
-                    var dc = 1 - (Math.abs(c - rows / 2) / (rows / 2));
-                    var drc = (dr + dc) / 2;
-                    var ai = r % options.bands;
-                    var pow = (analyserData[ai] + analyserData[rows - 1 - ai]) / 2;
-                    var scale = pow / options.bands;
-                    var na = c * rows + ((r + d) % rows);
-                    var noise = options.noiseMap[na];
-                    var cpow = 1 - ((rows - c) / rows * circularStrength);
-                    var level = v.r.z + (noise / 64 * noiseStrength) * cpow + (audioStrength * 2 * scale * scale) * cpow;
-                    var radius = v.radius || level;
-                    radius += (level - radius) / 2;
-                    v.x = v.r.x * radius;
-                    v.y = v.r.y * radius;
-                    v.z = 0; // -c;
-                    v.radius = radius;
+                angular.forEach(lines1, function(line, l) {
+                    updateLine(line.geometry, points1[l], l, 1);
+                    if (useMeshLines) {
+                        meshLines1[l].setGeometry(meshLineGeometries1[l]);
+                    }
                 });
-                angular.forEach(circles, function(circle, l) {
-                    // var points = circle.points;
-                    // var spline = circle.spline;
-                    // spline.getPoints(rows * 2);
-                    // circle.geometry.vertices = points;
-                    // geometry.computeLineDistances();
-                    // geometry.lineDistancesNeedUpdate = true;
-                    circle.geometry.verticesNeedUpdate = true;
+
+                angular.forEach(lines2, function(line, l) {
+                    updateLine(line.geometry, points2[l], l, 2);
+                    if (useMeshLines) {
+                        meshLines2[l].setGeometry(meshLineGeometries2[l]);
+                    }
                 });
+
+                group1.rotation.z += 0.001;
+                group2.rotation.z -= 0.001;
+
+                var step = stepper.getCurrentStep();
+                var position = OBJECTS.ribbon.spline.getPointAt((index + 0.5) / stepper.steps.length);
+                // position.y += options.cameraHeight;
+
+                position.add(step.circle.position);
+
+                object.position.copy(position);
+                /*
+                object.position.x += (position.x + Math.random() * 20 - object.position.x) / 20;
+                object.position.y += (position.y + Math.random() * 20 - object.position.y) / 20;
+                object.position.z += (position.z + Math.random() * 20 - object.position.z) / 20;
+                */
+
                 object.scale.x = object.scale.y = object.scale.z = 0.001 + 0.3 * state.pow;
                 object.lookAt(camera.position);
-                // d++;
+
+                // iterator++;
             }
 
-            var position = OBJECTS.ribbon.cameraSpline.getPointAt((index + 0.5) / stepper.steps.length);
+            function updateMaterial() {
+                material.color.setHex(options.colors.lines);
+                material1.color.setHex(options.colors.lines);
+            }
 
-            object.position.copy(position);
+            console.log(object);
 
             return {
                 add: add,
                 remove: remove,
-                update: update,
                 object: object,
-                material: material,
                 state: state,
-            };
-        }
-
-        function getObjectDots() {
-            var material = new THREE.PointsMaterial({
-                color: options.colors.lines,
-                size: 1,
-                sizeAttenuation: false,
-                // vertexColors: THREE.VertexColors,
-            });
-            var geometry = new THREE.Geometry();
-            var object = new THREE.Points(geometry, material);
-            var rows = options.rows,
-                space = options.space;
-            var points = new Array(rows * rows).fill(null).map(function(n, i) {
-                var r = Math.floor(i / rows);
-                var c = i - r * rows;
-                var dr = 1 - (Math.abs(r - rows / 2) / (rows / 2));
-                var dc = 1 - (Math.abs(c - rows / 2) / (rows / 2));
-                var drc = (dr + dc) / 2;
-                var idrc = 1 - drc;
-                return {
-                    x: -(space * rows / 2) + space * c,
-                    y: -(space * rows / 2) + space * r,
-                    z: 0,
-                };
-            });
-            var i = 0,
-                t = points.length;
-            while (i < t) {
-                var point = points[i];
-                var vertex = new THREE.Vector3();
-                vertex.x = point.x;
-                vertex.y = point.y;
-                vertex.z = point.z;
-                geometry.vertices.push(vertex);
-                // geometry.colors.push(new THREE.Color(0xffcc00));
-                i++;
-            }
-            // geometry.mergeVertices();
-            geometry.verticesNeedUpdate = true;
-            object.geometry = geometry;
-
-            function add() {
-                console.log('OBJECTS.dots.add');
-                scene.add(object);
-            }
-
-            function remove() {
-                console.log('OBJECTS.dots.remove');
-                scene.remove(object);
-            }
-
-            var d = 0;
-
-            function update() {
-                angular.forEach(geometry.vertices, function(v, i) {
-                    animateVertexAtIndex(v, i, d);
-                });
-                d++;
-                geometry.verticesNeedUpdate = true;
-            }
-
-            return {
-                object: object,
-                material: material,
-                add: add,
-                remove: remove,
                 update: update,
+                updateMaterial: updateMaterial,
             };
         }
+        /*
+                function getObjectCirclesBak(index) {
+                    var geometry, material, object, circles = [];
 
-        function getObjectLines() {
-            var object, material, lines = [];
-            material = new THREE.LineBasicMaterial({
-                color: options.colors.lines
-            });
-            object = new THREE.Object3D();
-            var rows = options.rows,
-                space = options.space;
-            while (lines.length < options.rows) {
-                var geometry = new THREE.Geometry();
-                var line = new THREE.Line(geometry, material);
-                line.points = new Array(rows).fill(null);
-                // var spline = new THREE.CatmullRomCurve3(points);
-                // line.spline = spline;
-                lines.push(line);
-                object.add(line);
-            }
-            var points = new Array(rows * rows).fill(null).map(function(n, i) {
-                var r = Math.floor(i / rows);
-                var c = i - r * rows;
-                var dr = 1 - (Math.abs(r - rows / 2) / (rows / 2));
-                var dc = 1 - (Math.abs(c - rows / 2) / (rows / 2));
-                var drc = (dr + dc) / 2;
-                var idrc = 1 - drc;
-                var point = new THREE.Vector3(-(space * rows / 2) + space * c, -(space * rows / 2) + space * r,
-                    0
-                );
-                lines[c].points[r] = point;
-                lines[c].geometry.vertices.push(point);
-                return point;
-            });
+                    object = new THREE.Object3D();
 
-            function add() {
-                console.log('OBJECTS.lines.add');
-                scene.add(object);
-            }
+                    geometry = new THREE.IcosahedronGeometry(90, 3); // radius, detail
+                    material = new THREE.MeshBasicMaterial({
+                        color: 0xffff00,
+                    });
+                    var sphere = new THREE.Mesh(geometry, material);
+                    object.add(sphere);
 
-            function remove() {
-                console.log('OBJECTS.lines.remove');
-                scene.remove(object);
-            }
+                    material = new THREE.LineBasicMaterial({
+                        color: options.colors.lines
+                    });
 
-            var d = 0;
+                    var pn = options.points;
 
-            function update() {
-                var rows = options.rows,
-                    audioStrength = options.audioStrength,
-                    noiseStrength = options.noiseStrength;
-                angular.forEach(points, function(v, i) {
-                    animateVertexAtIndex(v, i, d);
-                });
-                angular.forEach(lines, function(line, l) {
-                    // var points = line.points;
-                    // var spline = line.spline;
-                    // spline.getPoints(rows * 2);
-                    // line.geometry.vertices = points;
-                    // geometry.computeLineDistances();
-                    // geometry.lineDistancesNeedUpdate = true;
-                    line.geometry.verticesNeedUpdate = true;
-                });
-                d++;
-            }
-            return {
-                add: add,
-                remove: remove,
-                update: update,
-                object: object,
-                material: material,
-            };
-        }
+                    while (circles.length < pn) {
+                        geometry = new THREE.Geometry();
+                        var circle = new THREE.LineLoop(geometry, material);
+                        circle.points = new Array(pn).fill(null);
+                        // var spline = new THREE.CatmullRomCurve3(points);
+                        // circle.spline = spline;
+                        circles.push(circle);
+                        object.add(circle);
+                    }
+                    var points = new Array(pn * pn).fill(null).map(function(n, i) {
+                        var r = Math.floor(i / pn);
+                        var c = i - r * pn;
+                        var angle = 2 * Math.PI / pn;
+                        var rad = angle * r + angle * c * 0.1;
+                        var point = new THREE.Vector3();
+                        point.r = {
+                            x: Math.cos(rad),
+                            y: Math.sin(rad),
+                            z: 96 + (c * c * c * 0.0001),
+                        };
+                        circles[c].points[r] = point;
+                        circles[c].geometry.vertices.push(point);
+                        return point;
+                    });
 
+                    var state = {
+                        pow: 0,
+                        duration: 0.350,
+                        enabled: false,
+                        adding: false,
+                        removing: false,
+                    };
+
+                    var to = null;
+
+                    function add() {
+                        console.log('OBJECTS.circles.add');
+                        scene.add(object);
+                        state.adding = Date.now();
+                        state.removing = false;
+                        state.enabled = true;
+                        if (state.tween) {
+                            state.tween.kill();
+                        }
+                        state.tween = TweenLite.to(state, state.duration, {
+                            pow: 1,
+                            delay: 0,
+                            ease: Power2.easeInOut,
+                            onComplete: function() {
+                                state.adding = false;
+                            },
+                        });
+                    }
+
+                    function remove() {
+                        console.log('OBJECTS.circles.remove');
+                        state.adding = false;
+                        state.removing = Date.now();
+                        if (state.tween) {
+                            state.tween.kill();
+                        }
+                        state.tween = TweenLite.to(state, state.duration, {
+                            pow: 0,
+                            delay: 0,
+                            ease: Power2.easeInOut,
+                            onComplete: function() {
+                                state.removing = false;
+                                state.enabled = false;
+                                scene.remove(object);
+                            },
+                        });
+                    }
+
+                    var d = 0;
+
+                    function update() {
+                        var audioStrength = options.audioStrength,
+                            noiseStrength = options.noiseStrength,
+                            circularStrength = options.circularStrength;
+                        angular.forEach(points, function(v, i) {
+                            var r = Math.floor(i / pn);
+                            var c = i - r * pn;
+                            var b = Math.abs(c - pn / 2) * 2;
+                            var dr = 1 - (Math.abs(r - pn / 2) / (pn / 2));
+                            var dc = 1 - (Math.abs(c - pn / 2) / (pn / 2));
+                            var drc = (dr + dc) / 2;
+                            var ai = r % options.bands;
+                            var pow = (analyserData[ai] + analyserData[pn - 1 - ai]) / 2;
+                            var scale = pow / options.bands;
+                            var na = c * pn + ((r + d) % pn);
+                            var noise = options.noiseMap[na];
+                            var cpow = 1 - ((pn - c) / pn * circularStrength);
+                            var level = v.r.z + (noise / 64 * noiseStrength) * cpow + (audioStrength * 2 * scale * scale) * cpow;
+                            var radius = v.radius || level;
+                            radius += (level - radius) / 2;
+                            v.x = v.r.x * radius;
+                            v.y = v.r.y * radius;
+                            v.z = 0; // -c;
+                            v.radius = radius;
+                        });
+                        angular.forEach(circles, function(circle, l) {
+                            // var points = circle.points;
+                            // var spline = circle.spline;
+                            // spline.getPoints(pn * 2);
+                            // circle.geometry.vertices = points;
+                            // geometry.computeLineDistances();
+                            // geometry.lineDistancesNeedUpdate = true;
+                            circle.geometry.verticesNeedUpdate = true;
+                        });
+                        object.scale.x = object.scale.y = object.scale.z = 0.001 + 0.3 * state.pow;
+                        object.lookAt(camera.position);
+                        // d++;
+                    }
+
+                    var position = OBJECTS.ribbon.cameraSpline.getPointAt((index + 0.5) / stepper.steps.length);
+
+                    object.position.copy(position);
+
+                    return {
+                        add: add,
+                        remove: remove,
+                        update: update,
+                        object: object,
+                        material: material,
+                        state: state,
+                    };
+                }
+        */
         function createObjects() {
             // OBJECTS.tube = getObjectTube();
             OBJECTS.ribbon = getObjectRibbon();
-            OBJECTS.dots = getObjectDots();
-            OBJECTS.lines = getObjectLines();
             OBJECTS.circles = new Array(stepper.steps).fill(null);
-            // OBJECTS.notes = getNotes();
         }
 
         function createAnalyser() {
@@ -843,22 +910,13 @@
         }
 
         function updateAnalyser() {
-            // notes.rotation.z -= 0.0025;
-            // lines.rotation.z -= 0.0025;            
             if (analyserData) {
                 analyser.getByteFrequencyData(analyserData);
-                if (options.display === '0') {
-                    angular.forEach(OBJECTS.circles, function(circle) {
-                        if (circle && circle.state.enabled) {
-                            circle.update();
-                        }
-                    });
-                } else if (options.display === '1') {
-                    OBJECTS.lines.update();
-                } else if (options.display === '2') {
-                    OBJECTS.dots.update();
-                }
-                // OBJECTS.notes.update();
+                angular.forEach(OBJECTS.circles, function(circle) {
+                    if (circle && circle.state.enabled) {
+                        circle.update();
+                    }
+                });
             }
         }
 
@@ -894,7 +952,22 @@
         function addGui() {
             gui = new dat.GUI();
             gui.closed = true;
-            gui.add(options, 'display', { Circles: 0, Lines: 1, Dots: 2 }).onChange(onChange);
+            gui.add(options, 'cameraHeight', 20.0, 100.0).onChange(onChange);
+            gui.add(options, 'targetHeight', 20.0, 100.0).onChange(onChange);
+            /*
+            var cameraPosition = gui.addFolder('CameraPosition');
+            cameraPosition.add(options.camera.position, 'x', -300, 300).onChange(onChangePositions);
+            cameraPosition.add(options.camera.position, 'y', -300, 300).onChange(onChangePositions);
+            cameraPosition.add(options.camera.position, 'z', -300, 300).onChange(onChangePositions);
+            var cameraTarget = gui.addFolder('cameraTarget');
+            cameraTarget.add(options.camera.target, 'x', -300, 300).onChange(onChangePositions);
+            cameraTarget.add(options.camera.target, 'y', -300, 300).onChange(onChangePositions);
+            cameraTarget.add(options.camera.target, 'z', -300, 300).onChange(onChangePositions);
+            */
+            var circlePosition = gui.addFolder('circlePosition');
+            circlePosition.add(options.circle.position, 'x', -300, 300).onChange(onChangePositions);
+            circlePosition.add(options.circle.position, 'y', -300, 300).onChange(onChangePositions);
+            circlePosition.add(options.circle.position, 'z', -300, 300).onChange(onChangePositions);
             gui.addColor(options.colors, 'background').onChange(onChange);
             gui.addColor(options.colors, 'lines').onChange(onChange);
             gui.add(options, 'audioVolume', 0.01, 1.0).onChange(onChange);
@@ -1065,148 +1138,112 @@
             };
         }
 
+        function getObjectTube() {
+            var options = {
+                path: spline,
+                tubularSegments: 500,
+                radius: 1,
+                radiusSegments: 2,
+                closed: true,
+            }
+            var spline = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-400, -400, 0),
+                new THREE.Vector3(400, -400, 0),
+                new THREE.Vector3(1400, -400, 0),
+                new THREE.Vector3(400, 400, 0),
+                new THREE.Vector3(-400, 400, 0)
+            ]);
+            spline.type = 'catmullrom';
+            spline.closed = true;
 
+            var object = new THREE.Object3D();
+            scene.add(object);
 
-        //////////
+            var material = new THREE.MeshLambertMaterial({
+                color: 0xffffff
+            });
+            var geometry = new THREE.TubeBufferGeometry(spline, options.tubularSegments, options.radius, options.radiusSegments, options.closed);
+            var group = new THREE.Mesh(geometry, material);
+            object.add(group);
 
-        function addNotes() {
-            // alert('onChange', params);
+            // if (group !== undefined) {
+            //     object.remove(group);
+            //     group.children[0].geometry.dispose();
+            //     group.children[1].geometry.dispose();
+            // }            
+
             /*
-            var dx = 10 - 10 * params.dispersion * (1 - params.bulge);
-            var dy = 10 - 10 * params.dispersion * (1 - params.bulge);
-            var dz = 40 - 40 * params.dispersion * (1 - params.bulge);
+            var geometry = new THREE.Geometry();
+            geometry.vertices = spline.getPoints(500);
+            var line = new MeshLine();
+            line.setGeometry(geometry);
+            // line.setGeometry( geometry, function( p ) { return 2; } ); // makes width 2 * lineWidth
+            // line.setGeometry( geometry, function( p ) { return 1 - p; } ); // makes width taper
+            // line.setGeometry( geometry, function( p ) { return 2 + Math.sin( 50 * p ); } ); // makes width sinusoidal
+            var material = new MeshLineMaterial({
+                color: new THREE.Color(0xffffff),
+                lineWidth: 4,
+            });
+            var mesh = new THREE.Mesh(line.geometry, material);
+            object.add(mesh);
             */
-            var geometry = new THREE.Geometry();
-            // geometry.vertices.splice(0, geometry.vertices.length);
-            var points = options.points;
-            var i = 0,
-                t = points.length;
-            while (i < t) {
-                var p = points[i];
-                geometry.vertices.push(new THREE.Vector3(p.x, p.y, p.z));
-                // geometry.colors.push(new THREE.Color(0, 0, 0));
-                i++;
-            }
-            geometry.mergeVertices();
-            geometry.verticesNeedUpdate = true;
-            notes.geometry = geometry;
-            addSplines(points);
-        }
-
-        function addSplines(points) {
-            points = points.map(function(point) {
-                return new THREE.Vector3(point.x, point.y, point.z);
-            });
-            var spline = new THREE.CatmullRomCurve3(points);
-            var geometry = new THREE.Geometry();
-            geometry.vertices = spline.getPoints(5000);
-            // geometry.mergeVertices();
-            // geometry.verticesNeedUpdate = true;
-            // geometry.computeLineDistances();
-            // geometry.lineDistancesNeedUpdate = true;
-            lines.geometry = geometry;
-        }
-
-        /*
-        function getNotes() {
-            var object, geometry, material;
-            geometry = new THREE.Geometry();
-            texture = new THREE.CanvasTexture(getSprite());
-            material = new THREE.PointsMaterial({
-                size: 12,
-                map: texture,
-                vertexColors: THREE.VertexColors,
-                blending: THREE.AdditiveBlending,
-                depthTest: false,
-                transparent: true
-            });
-            material = new THREE.PointsMaterial({
-                color: options.colors.notes,
-                size: 2,
-                sizeAttenuation: false,
-            });
-            object = new THREE.Points(geometry, material);
-
-            var points = options.points;
-            var i = 0,
-                t = points.length;
-            while (i < t) {
-                var p = points[i];
-                geometry.vertices.push(new THREE.Vector3(p.x, p.y, p.z));
-                // geometry.colors.push(new THREE.Color(0, 0, 0));
-                i++;
-            }
-            geometry.mergeVertices();
-            geometry.verticesNeedUpdate = true;
 
             function add() {
-                console.log('OBJECTS.notes.add');
+                console.log('OBJECTS.tube.add');
                 scene.add(object);
             }
 
             function remove() {
-                console.log('OBJECTS.notes.remove');
+                console.log('OBJECTS.tube.remove');
                 scene.remove(object);
             }
 
+            var d = 0; // iterator
+            var a = new THREE.Vector3(); // normal
+            var b = new THREE.Vector3(); // binormal
+
             function update() {
-                angular.forEach(geometry.vertices, function(v, i) {
-                    var index = i % options.bands;
-                    var pow = analyserData[index];
-                    var scale = (pow / options.bands) * 2;
-                    var p = options.points[i];
-                    var vx = p.x * (1 + scale);
-                    var vy = p.y * (1 + scale);
-                    var vz = p.z * (1 + scale);
-                    v.x += (vx - v.x) / 3;
-                    v.y += (vy - v.y) / 3;
-                    v.z += (vz - v.z) / 3;
-                });
-                geometry.verticesNeedUpdate = true;
+                var duration = 20 * 1000;
+                var scale = 1;
+                var offset = 15;
+                var lookAhead = true;
+                var msec = Date.now();
+                var pow = (msec % duration) / duration;
+                var dir = spline.getTangentAt(pow);
+                var tangents = geometry.tangents;
+                var binormals = geometry.binormals;
+                var x = pow * tangents.length;
+                var c = Math.floor(x);
+                var n = (c + 1) % tangents.length;
+                b.subVectors(binormals[n], binormals[c]);
+                b.multiplyScalar(x - c).add(binormals[c]);
+                a.copy(b).cross(dir);
+                var p = spline.getPointAt(pow);
+                p.multiplyScalar(scale);
+                p.add(a.clone().multiplyScalar(offset));
+                camera.position.copy(p);
+                var lookAt;
+                if (lookAhead) {
+                    // using arclength for stablization in look ahead
+                    lookAt = spline.getPointAt((pow + 30 / spline.getLength()) % 1).multiplyScalar(scale);
+                } else {
+                    // camera orientation 2 - up orientation via normal
+                    lookAt = new THREE.Vector3().copy(p).add(dir);
+                }
+                camera.matrix.lookAt(camera.position, lookAt, a);
+                camera.rotation.setFromRotationMatrix(camera.matrix, camera.rotation.order);
+                d++;
             }
+
             return {
+                object: object,
+                spline: spline,
+                geometry: geometry,
                 add: add,
                 remove: remove,
                 update: update,
-                object: object,
             };
-
         }
-
-        function getLines() {
-            var object, geometry, material;
-
-            geometry = new THREE.Geometry();
-            material = new THREE.LineDashedMaterial({
-                color: options.colors.lines,
-                dashSize: 1,
-                gapSize: 0.5,
-            });
-            material = new THREE.LineBasicMaterial({
-                color: options.colors.lines
-            });
-            object = new THREE.Line(geometry, material);
-
-            function add() {
-                scene.add(object);
-            }
-
-            function remove() {
-                scene.remove(object);
-            }
-
-            function update() {
-
-            }
-            return {
-                add: add,
-                remove: remove,
-                update: update,
-                object: object,
-            };
-
-        }
-        */
 
     }]);
 

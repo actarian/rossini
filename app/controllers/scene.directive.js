@@ -211,6 +211,29 @@
                     console.log('objects', objects);
                 });
 
+                scope.$on('onStepComplete', function($scope, step) {
+                    console.log('onStepComplete', step.current);
+                    /*
+                    var circle = null;
+                    var current = step.current,
+                        previous = step.previous;
+                    if (current > 0) {
+                        circle = objects.circles[current] || getObjectCircles(current);
+                        circle.add();
+                    }
+                    objects.circles[current] = circle;
+                    setTimeout(function() {
+                        if (stepper.current !== previous && previous > 0) {
+                            var circle = objects.circles[previous];
+                            if (circle) {
+                                circle.remove();
+                            }
+                        }
+                    }, stepper.duration * 1000);
+                    // console.log('objects', objects);
+                    */
+                });
+
                 scope.$on('onOptionsChanged', function($scope) {
                     // renderer.setClearColor(stepper.values.background, 1);
                     if (objects.ribbon) {
@@ -391,16 +414,61 @@
                 function getObjectCircles(index) {
                     var geometry, object, circles = [];
 
-                    // materials
+                    var step = stepper.steps[index];
+                    var texture = new THREE.TextureLoader().load(step.circle.texture);
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.repeat.set(1, 1);
+
+                    var resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
+
+                    var material = new THREE.MeshBasicMaterial({
+                        color: 0xffffff,
+                        map: texture,
+                        transparent: true,
+                    });
+
                     var material1 = new THREE.LineBasicMaterial({
                         color: stepper.values.lines,
+                        transparent: true,
                     });
 
                     var material2 = new THREE.LineBasicMaterial({
                         color: stepper.values.overLines,
+                        transparent: true,
                     });
 
-                    var resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
+                    var materialLine1 = new MeshLineMaterial({
+                        color: stepper.values.lines,
+                        lineWidth: 1.0,
+                        depthTest: false,
+                        opacity: 1,
+                        transparent: true,
+                        resolution: resolution,
+                        /*
+                        sizeAttenuation: 1,
+                        near: 1,
+                        far: 1000,
+                        blending: THREE.AdditiveBlending,
+                        side: THREE.DoubleSide,
+                        */
+                    });
+
+                    var materialLine2 = new MeshLineMaterial({
+                        color: stepper.values.overLines,
+                        lineWidth: 1.0,
+                        depthTest: false,
+                        opacity: 1,
+                        transparent: true,
+                        resolution: resolution,
+                        /*
+                        sizeAttenuation: 1,
+                        near: 1,
+                        far: 1000,
+                        blending: THREE.AdditiveBlending,
+                        side: THREE.DoubleSide,
+                        */
+                    });
 
                     object = new THREE.Object3D();
 
@@ -410,7 +478,7 @@
                         meshLines2 = [],
                         meshLineGeometries1 = [],
                         meshLineGeometries2 = [],
-                        useMeshLines = false;
+                        useMeshLines = true;
 
                     var pn = options.points,
                         ln = options.lines;
@@ -419,18 +487,9 @@
                     object.add(dummy);
 
                     // circle
-                    var step = stepper.steps[index];
-                    var texture = new THREE.TextureLoader().load(step.circle.texture);
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.repeat.set(1, 1);
-                    var material = new THREE.MeshBasicMaterial({
-                        color: 0xffffff,
-                        map: texture,
-                        transparent: true,
-                    });
                     geometry = new THREE.PlaneGeometry(options.radius * 2 - 20, options.radius * 2 - 20, 8, 8);
                     var plane = new THREE.Mesh(geometry, material);
+                    plane.position.z = -30;
                     dummy.add(plane);
                     // circle
 
@@ -445,7 +504,7 @@
 
                     var state = {
                         pow: 0,
-                        duration: 0.350,
+                        duration: 2.350,
                         enabled: false,
                         adding: false,
                         removing: false,
@@ -465,7 +524,7 @@
                         state.tween = TweenLite.to(state, state.duration, {
                             pow: 1,
                             delay: 0,
-                            ease: Power2.easeInOut,
+                            ease: Elastic.easeOut.config(1, 0.3),
                             onComplete: function() {
                                 state.adding = false;
                             },
@@ -482,7 +541,7 @@
                         state.tween = TweenLite.to(state, state.duration, {
                             pow: 0,
                             delay: 0,
-                            ease: Power2.easeInOut,
+                            ease: Power2.easeOut,
                             onComplete: function() {
                                 state.removing = false;
                                 state.enabled = false;
@@ -496,11 +555,22 @@
                     function getLine1(v, i) {
                         var geometry = new THREE.Geometry();
                         var points = addPoints(geometry, i, 1);
-                        var line = null;
-                        line = new THREE.LineLoop(geometry, material1);
                         points1.push(points);
-                        // var spline = new THREE.CatmullRomCurve3(points);
-                        // circle.spline = spline;
+                        var line = null;
+                        if (useMeshLines) {
+                            var meshLine = new MeshLine();
+                            meshLine.setGeometry(geometry);
+                            meshLineGeometries1.push(geometry);
+                            meshLines1.push(meshLine);
+                            // meshLine.setGeometry( geometry, function( p ) { return 2; } ); // makes width 2 * lineWidth
+                            // meshLine.setGeometry( geometry, function( p ) { return 1 - p; } ); // makes width taper
+                            // meshLine.setGeometry( geometry, function( p ) { return 2 + Math.sin( 50 * p ); } ); // makes width sinusoidal
+                            line = new THREE.Mesh(meshLine.geometry, materialLine1);
+                        } else {
+                            line = new THREE.LineLoop(geometry, material1);
+                            // var spline = new THREE.CatmullRomCurve3(points);
+                            // circle.spline = spline;
+                        }
                         group1.add(line);
                         return line;
                     }
@@ -508,11 +578,22 @@
                     function getLine2(v, i) {
                         var geometry = new THREE.Geometry();
                         var points = addPoints(geometry, i, 2);
-                        var line = null;
-                        line = new THREE.LineLoop(geometry, material2);
                         points2.push(points);
-                        // var spline = new THREE.CatmullRomCurve3(points);
-                        // circle.spline = spline;
+                        var line = null;
+                        if (useMeshLines) {
+                            var meshLine = new MeshLine();
+                            meshLine.setGeometry(geometry);
+                            meshLineGeometries2.push(geometry);
+                            meshLines2.push(meshLine);
+                            // meshLine.setGeometry( geometry, function( p ) { return 2; } ); // makes width 2 * lineWidth
+                            // meshLine.setGeometry( geometry, function( p ) { return 1 - p; } ); // makes width taper
+                            // meshLine.setGeometry( geometry, function( p ) { return 2 + Math.sin( 50 * p ); } ); // makes width sinusoidal
+                            line = new THREE.Mesh(meshLine.geometry, materialLine2);
+                        } else {
+                            line = new THREE.LineLoop(geometry, material2);
+                            // var spline = new THREE.CatmullRomCurve3(points);
+                            // circle.spline = spline;
+                        }
                         group2.add(line);
                         return line;
                     }
@@ -543,6 +624,7 @@
                             geometry.vertices.push(v);
                             return v;
                         });
+                        geometry.vertices.push(points[0]);
                         return points;
                     }
 
@@ -578,7 +660,7 @@
 
                             v.x = v.sincos.x * v.sincos.radius;
                             v.y = v.sincos.y * v.sincos.radius;
-                            v.z = 0; // -l;
+                            v.z = 10 * g; // -l;
                             // console.log(v.sincos.radius);
                         });
 
@@ -609,10 +691,16 @@
                     function updateCircle() {
                         angular.forEach(lines1, function(line, l) {
                             updateLine(line.geometry, points1[l], l, 1);
+                            if (useMeshLines) {
+                                meshLines1[l].setGeometry(meshLineGeometries1[l]);
+                            }
                         });
 
                         angular.forEach(lines2, function(line, l) {
                             updateLine(line.geometry, points2[l], l, 2);
+                            if (useMeshLines) {
+                                meshLines2[l].setGeometry(meshLineGeometries2[l]);
+                            }
                         });
 
                         group1.rotation.z += 0.001;
@@ -629,12 +717,12 @@
                         object.position.copy(position);
 
                         /*
-                        object.position.x += (position.x + Math.random() * 20 - object.position.x) / 20;
-                        object.position.y += (position.y + Math.random() * 20 - object.position.y) / 20;
-                        object.position.z += (position.z + Math.random() * 20 - object.position.z) / 20;
-                        */
+                        object.position.x += (position.x + Math.random() * 20 - object.position.x) / 40;
+                        object.position.y += (position.y + Math.random() * 20 - object.position.y) / 40;
+                        object.position.z += (position.z + Math.random() * 20 - object.position.z) / 40;
+*/
 
-                        object.scale.x = object.scale.y = object.scale.z = 0.001 + 0.1 * state.pow;
+                        object.scale.x = object.scale.y = object.scale.z = 0.001 + 0.14 * state.pow;
                         object.lookAt(camera.position);
 
                         updateCircleMaterial();
@@ -643,6 +731,9 @@
                     }
 
                     function updateCircleMaterial() {
+                        material.opacity = state.pow;
+                        material1.opacity = state.pow;
+                        material2.opacity = state.pow;
                         material1.color = stepper.values.lines;
                         material2.color = stepper.values.overLines;
                     }

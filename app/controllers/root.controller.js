@@ -19,8 +19,9 @@
             position: new THREE.Vector3(),
         },
         ribbon: {
-            points: 40, // 12
-            vertices: 3600, // 1200
+            steps: 12,
+            points: 24,
+            vertices: 2400,
         },
         audioVolume: 0.9,
         bands: 128,
@@ -72,7 +73,7 @@
         };
 
         function getItems() {
-            var items = new Array(24).fill().map(function(v, i) {
+            var items = new Array(options.ribbon.steps).fill().map(function(v, i) {
                 return {
                     id: i + 1,
                     name: 'Step ' + (i + 1),
@@ -96,7 +97,8 @@
         function init() {
             var deferred = $q.defer();
             $http.get('json/rossini.js').then(function(response) {
-                var items = response.data; // getItems(); // 
+                var items = getItems();
+                // var items = response.data; 
                 angular.forEach(items, function(item) {
                     item.circle.position = new THREE.Vector3().copy(item.circle.position);
                     steps.push(item);
@@ -168,6 +170,7 @@
             tweenTo(index / steps.length, step, duration, function() {
                 clearTweens();
                 console.log(step, stepper.values);
+                $rootScope.$broadcast('onStepComplete', { current: index });
             });
         }
 

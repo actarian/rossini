@@ -30,11 +30,13 @@
 </head>
 
 <body ng-controller="RootCtrl" ng-cloak>
-    <section id="scene" scene="scene"></section>
-    <div class="controls">
-        <button type="button" ng-click="stepper.previous()">prev</button>
-        <button type="button" ng-click="stepper.next()">next</button>
-        <span ng-bind="stepper.current"></span>
+    <div id="scene" ng-if="scene">
+        <section scene="scene"></section>
+        <div class="controls">
+            <button type="button" ng-click="stepper.previous()">prev</button>
+            <button type="button" ng-click="stepper.next()">next</button>
+            <span ng-bind="stepper.current"></span>
+        </div>
     </div>
     <!-- <json-formatter json="model"></json-formatter> -->
     <!-- TEMPLATES -->

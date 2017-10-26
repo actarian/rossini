@@ -23,7 +23,7 @@
             vertices: 3600, // 1200
         },
         audioUrl: "audio/rossini-192.mp3",
-        audioVolume: 0.000009,
+        audioVolume: 0.9,
         bands: 128,
         points: 128,
         lines: 32,
@@ -160,6 +160,7 @@
             var step = steps[index];
             tweenTo(index / steps.length, step.colors, duration, function() {
                 clearTweens();
+                console.log(step, stepper.values);
             });
         }
 

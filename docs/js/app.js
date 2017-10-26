@@ -148,7 +148,56 @@
         return s * (min + (max - min) * a);
     }
 
-    app.directive('scene', ['SceneOptions', 'StepperService', function(SceneOptions, StepperService) {
+    app.service('AnalyserService', ['$rootScope', '$q', '$http', 'SceneOptions', function($rootScope, $q, $http, SceneOptions) {
+
+        var service = this;
+        var options = SceneOptions;
+        var analyser, audio;
+
+        function init() {
+            var source, ctx, actx = (window.AudioContext || window.webkitAudioContext);
+            source = null;
+            ctx = new actx();
+            analyser = ctx.createAnalyser();
+            audio = new Audio();
+            audio.src = options.audioUrl;
+            audio.controls = true;
+            audio.addEventListener('canplay', function() {
+                var bufferLength;
+                console.log('audio canplay');
+                source = ctx.createMediaElementSource(audio);
+                source.connect(analyser);
+                source.connect(ctx.destination);
+                analyser.fftSize = options.bands * 2;
+                bufferLength = analyser.frequencyBinCount;
+                console.log('bufferLength', bufferLength);
+                service.data = new Uint8Array(bufferLength);
+                return service.data;
+            });
+            audio.volume = options.audioVolume;
+            audio.play();
+        }
+
+        function update() {
+            if (service.data) {
+                analyser.getByteFrequencyData(service.data);
+            }
+        }
+
+        $rootScope.$on('onOptionsChanged', function($scope) {
+            if (audio) {
+                audio.volume = options.audioVolume;
+            }
+        });
+
+        this.audio = audio;
+        this.data = null;
+        this.init = init;
+        this.update = update;
+
+    }]);
+
+    app.directive('scene', ['SceneOptions', 'StepperService', 'AnalyserService', function(SceneOptions, StepperService, AnalyserService) {
         return {
             restrict: 'A',
             scope: {
@@ -164,21 +213,26 @@
 
                 var options = SceneOptions;
                 var stepper = StepperService;
+                var analyser = AnalyserService;
 
                 options.noiseMap = getPerlinNoise(options.points, options.lines);
 
-                var analyser, analyserData, audio;
                 var stats, scene, camera, shadow, back, light, renderer, width, height, w2, h2, mouse = { x: 0, y: 0 };
                 var controls = null;
 
                 scope.$on('onStep', function($scope, step) {
                     console.log('onStep', step.current);
-                    var circle = objects.circles[step.current] || getObjectCircles(step.current);
-                    circle.add();
-                    objects.circles[step.current] = circle;
+                    var circle = null;
+                    var current = step.current,
+                        previous = step.previous;
+                    if (current > 0) {
+                        circle = objects.circles[current] || getObjectCircles(current);
+                        circle.add();
+                    }
+                    objects.circles[current] = circle;
                     setTimeout(function() {
-                        if (step.previous !== stepper.current) {
-                            var circle = objects.circles[step.previous];
+                        if (stepper.current !== previous && previous > 0) {
+                            var circle = objects.circles[previous];
                             if (circle) {
                                 circle.remove();
                             }
@@ -189,9 +243,6 @@
 
                 scope.$on('onOptionsChanged', function($scope) {
                     // renderer.setClearColor(stepper.values.background, 1);
-                    if (audio) {
-                        audio.volume = options.audioVolume;
-                    }
                     if (objects.ribbon) {
                         objects.ribbon.updateMaterial();
                     }
@@ -200,15 +251,14 @@
                             circle.updateMaterial();
                         }
                     });
-                    console.log('onOptionsChanged');
                 });
 
                 createScene();
                 // createLights();
                 createObjects();
-                createAnalyser();
                 addListeners();
                 loop();
+                analyser.init();
 
                 function createScene() {
                     width = window.innerWidth;
@@ -294,6 +344,7 @@
 
                     var line = new MeshLine();
                     line.setGeometry(geometry);
+
                     // line.setGeometry( geometry, function( p ) { return 2; } ); // makes width 2 * lineWidth
                     // line.setGeometry( geometry, function( p ) { return 1 - p; } ); // makes width taper
                     // line.setGeometry( geometry, function( p ) { return 2 + Math.sin( 50 * p ); } ); // makes width sinusoidal
@@ -531,12 +582,12 @@
                         var audioStrength = options.audioStrength,
                             noiseStrength = options.noiseStrength,
                             circularStrength = options.circularStrength,
-                            data = analyserData;
+                            data = analyser.data;
 
                         angular.forEach(vertices, function(v, i) {
                             var aia = i % options.bands;
                             var aib = (pn - 1 - i) % options.bands;
-                            var audioPow = ((data[aia] + data[aib]) / 2) / options.bands;
+                            var audioPow = data ? ((data[aia] + data[aib]) / 2) / options.bands : 0;
                             // var audioPow = data[aia] / options.bands;
 
                             var nd = g === 1 ? 0 : 64;
@@ -638,49 +689,19 @@
                     };
                 }
 
-                function createAnalyser() {
-                    var source, ctx, actx = (window.AudioContext || window.webkitAudioContext);
-                    source = null;
-                    ctx = new actx();
-                    analyser = ctx.createAnalyser();
-                    audio = new Audio();
-                    audio.src = options.audioUrl;
-                    audio.controls = true;
-                    audio.addEventListener('canplay', function() {
-                        var bufferLength;
-                        console.log('audio canplay');
-                        source = ctx.createMediaElementSource(audio);
-                        source.connect(analyser);
-                        source.connect(ctx.destination);
-                        analyser.fftSize = options.bands * 2;
-                        bufferLength = analyser.frequencyBinCount;
-                        console.log('bufferLength', bufferLength);
-                        analyserData = new Uint8Array(bufferLength);
-                        return analyserData;
-                    });
-                    audio.volume = options.audioVolume;
-                    return audio.play();
-                }
-
-                function updateAnalyser() {
-                    if (analyserData) {
-                        analyser.getByteFrequencyData(analyserData);
-                        angular.forEach(objects.circles, function(circle) {
-                            if (circle && circle.state.enabled) {
-                                circle.update();
-                            }
-                        });
-                    }
-                }
-
                 function render() {
+                    analyser.update();
                     if (controls) {
                         controls.update();
                     }
                     if (objects.ribbon) {
                         objects.ribbon.update();
                     }
-                    updateAnalyser();
+                    angular.forEach(objects.circles, function(circle) {
+                        if (circle && circle.state.enabled) {
+                            circle.update();
+                        }
+                    });
                     renderer.render(scene, camera);
                 }
 
@@ -772,7 +793,7 @@
             vertices: 3600, // 1200
         },
         audioUrl: "audio/rossini-192.mp3",
-        audioVolume: 0.000009,
+        audioVolume: 0.9,
         bands: 128,
         points: 128,
         lines: 32,
@@ -909,6 +930,7 @@
             var step = steps[index];
             tweenTo(index / steps.length, step.colors, duration, function() {
                 clearTweens();
+                console.log(step, stepper.values);
             });
         }
 

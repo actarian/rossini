@@ -784,6 +784,12 @@
                         material2.opacity = state.pow;
                         material1.color = stepper.values.lines;
                         material2.color = stepper.values.overLines;
+                        /*
+                        if (useMeshLines) {
+                            materialLine1.uniforms.lineWidth.value = state.pow;
+                            materialLine2.uniforms.lineWidth.value = state.pow;
+                        }
+                        */
                     }
 
                     return {

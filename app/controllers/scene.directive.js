@@ -187,7 +187,7 @@
 
                 options.noiseMap = getPerlinNoise(options.points, options.lines);
 
-                var stats, scene, camera, shadow, back, light, renderer, width, height, w2, h2, mouse = { x: 0, y: 0 };
+                var stats, scene, camera, shadow, back, light, renderer, width, height, w2, h2;
                 var controls = null;
 
                 scope.$on('onStepChanged', function($scope, step) {
@@ -294,7 +294,7 @@
                     var points = new Array(options.ribbon.points).fill(null).map(function() {
                         var p = new THREE.Vector3().copy(prev);
                         prev.x += getRandomRange(500, 1000, true);
-                        prev.y += getRandomRange(20, 60, true);
+                        prev.y += getRandomRange(5, 20, true);
                         prev.z += getRandomRange(1000, 2000, false);
                         return p;
                     });
@@ -304,7 +304,7 @@
                     spline.closed = false;
 
                     var cameraSpline = new THREE.CatmullRomCurve3(spline.points.map(function(p) {
-                        return new THREE.Vector3(p.x, p.y + 30, p.z);
+                        return new THREE.Vector3(p.x, p.y + 20, p.z);
                     }));
                     cameraSpline.type = 'catmullrom';
                     cameraSpline.closed = false;
@@ -340,13 +340,11 @@
                         var tpow = (cpow + c).mod(1);
                         var step = stepper.getCurrentStep();
                         var position = cameraSpline.getPointAt(cpow);
-                        position.y += options.camera.cameraHeight;
-                        position.y += step.camera.cameraHeight;
+                        position.y += stepper.values.cameraHeight;
                         var target = cameraSpline.getPointAt(tpow);
+                        target.y += stepper.values.targetHeight;
                         // var tangent = cameraSpline.getTangent(tpow).normalize().multiplyScalar(100);
                         // target.add(tangent);
-                        target.y += options.camera.targetHeight;
-                        target.y += step.camera.targetHeight;
                         camera.position.copy(position);
                         camera.target.copy(target);
                         camera.lookAt(camera.target);
@@ -627,7 +625,7 @@
                         // var tangent = objects.ribbon.cameraSpline.getTangent(index + 0.1 / stepper.steps.length).normalize().multiplyScalar(300);
                         // position.add(tangent);
 
-                        position.y += options.camera.targetHeight;
+                        position.y += stepper.values.targetHeight;
                         object.position.copy(position);
 
                         /*
@@ -682,7 +680,21 @@
                     requestAnimationFrame(loop);
                 }
 
+                // var mouse = { x: 0, y: 0 };
+                // var mousePos = { x: 0, y: 0 };
+
                 function addListeners() {
+                    function onWindowResize() {
+                        width = window.innerWidth;
+                        height = window.innerHeight;
+                        w2 = width / 2;
+                        h2 = height / 2;
+                        renderer.setSize(width, height);
+                        camera.aspect = width / height;
+                        camera.updateProjectionMatrix();
+                    }
+                    window.addEventListener('resize', onWindowResize, false);
+                    /*
                     function handleMouseMove(event) {
                         mouse = { x: event.clientX, y: event.clientY };
                     }
@@ -712,17 +724,7 @@
                             mousePos = { x: event.touches[0].pageX, y: event.touches[0].pageY };
                         }
                     }
-
-                    function onWindowResize() {
-                        width = window.innerWidth;
-                        height = window.innerHeight;
-                        w2 = width / 2;
-                        h2 = height / 2;
-                        renderer.setSize(width, height);
-                        camera.aspect = width / height;
-                        camera.updateProjectionMatrix();
-                    }
-                    window.addEventListener('resize', onWindowResize, false);
+                    */
                     /*
                     document.addEventListener('mousemove', handleMouseMove, false);
                     document.addEventListener('mousedown', handleMouseDown, false);

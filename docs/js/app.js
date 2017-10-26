@@ -235,7 +235,7 @@
 
                 options.noiseMap = getPerlinNoise(options.points, options.lines);
 
-                var stats, scene, camera, shadow, back, light, renderer, width, height, w2, h2, mouse = { x: 0, y: 0 };
+                var stats, scene, camera, shadow, back, light, renderer, width, height, w2, h2;
                 var controls = null;
 
                 scope.$on('onStepChanged', function($scope, step) {
@@ -342,7 +342,7 @@
                     var points = new Array(options.ribbon.points).fill(null).map(function() {
                         var p = new THREE.Vector3().copy(prev);
                         prev.x += getRandomRange(500, 1000, true);
-                        prev.y += getRandomRange(20, 60, true);
+                        prev.y += getRandomRange(5, 20, true);
                         prev.z += getRandomRange(1000, 2000, false);
                         return p;
                     });
@@ -352,7 +352,7 @@
                     spline.closed = false;
 
                     var cameraSpline = new THREE.CatmullRomCurve3(spline.points.map(function(p) {
-                        return new THREE.Vector3(p.x, p.y + 30, p.z);
+                        return new THREE.Vector3(p.x, p.y + 20, p.z);
                     }));
                     cameraSpline.type = 'catmullrom';
                     cameraSpline.closed = false;
@@ -388,13 +388,11 @@
                         var tpow = (cpow + c).mod(1);
                         var step = stepper.getCurrentStep();
                         var position = cameraSpline.getPointAt(cpow);
-                        position.y += options.camera.cameraHeight;
-                        position.y += step.camera.cameraHeight;
+                        position.y += stepper.values.cameraHeight;
                         var target = cameraSpline.getPointAt(tpow);
+                        target.y += stepper.values.targetHeight;
                         // var tangent = cameraSpline.getTangent(tpow).normalize().multiplyScalar(100);
                         // target.add(tangent);
-                        target.y += options.camera.targetHeight;
-                        target.y += step.camera.targetHeight;
                         camera.position.copy(position);
                         camera.target.copy(target);
                         camera.lookAt(camera.target);
@@ -675,7 +673,7 @@
                         // var tangent = objects.ribbon.cameraSpline.getTangent(index + 0.1 / stepper.steps.length).normalize().multiplyScalar(300);
                         // position.add(tangent);
 
-                        position.y += options.camera.targetHeight;
+                        position.y += stepper.values.targetHeight;
                         object.position.copy(position);
 
                         /*
@@ -730,7 +728,21 @@
                     requestAnimationFrame(loop);
                 }
 
+                // var mouse = { x: 0, y: 0 };
+                // var mousePos = { x: 0, y: 0 };
+
                 function addListeners() {
+                    function onWindowResize() {
+                        width = window.innerWidth;
+                        height = window.innerHeight;
+                        w2 = width / 2;
+                        h2 = height / 2;
+                        renderer.setSize(width, height);
+                        camera.aspect = width / height;
+                        camera.updateProjectionMatrix();
+                    }
+                    window.addEventListener('resize', onWindowResize, false);
+                    /*
                     function handleMouseMove(event) {
                         mouse = { x: event.clientX, y: event.clientY };
                     }
@@ -760,17 +772,7 @@
                             mousePos = { x: event.touches[0].pageX, y: event.touches[0].pageY };
                         }
                     }
-
-                    function onWindowResize() {
-                        width = window.innerWidth;
-                        height = window.innerHeight;
-                        w2 = width / 2;
-                        h2 = height / 2;
-                        renderer.setSize(width, height);
-                        camera.aspect = width / height;
-                        camera.updateProjectionMatrix();
-                    }
-                    window.addEventListener('resize', onWindowResize, false);
+                    */
                     /*
                     document.addEventListener('mousemove', handleMouseMove, false);
                     document.addEventListener('mousedown', handleMouseDown, false);
@@ -800,8 +802,8 @@
             overLines: 0xb4bfdd,
         },
         camera: {
-            cameraHeight: 33,
-            targetHeight: 39,
+            cameraHeight: 0,
+            targetHeight: 5,
         },
         circle: {
             position: new THREE.Vector3(),
@@ -855,6 +857,8 @@
             background: new THREE.Color(options.colors.background),
             lines: new THREE.Color(options.colors.lines),
             overLines: new THREE.Color(options.colors.overLines),
+            cameraHeight: options.camera.cameraHeight,
+            targetHeight: options.camera.targetHeight,
         };
 
         function getItems() {
@@ -904,13 +908,15 @@
             }
         }
 
-        function tweenTo(pow, colors, duration, callback) {
+        function tweenTo(pow, step, duration, callback) {
             clearTweens();
-            var background = new THREE.Color(colors.background);
-            var lines = new THREE.Color(colors.lines);
-            var overLines = new THREE.Color(colors.overLines);
+            var background = new THREE.Color(step.colors.background);
+            var lines = new THREE.Color(step.colors.lines);
+            var overLines = new THREE.Color(step.colors.overLines);
             tweens.push(TweenLite.to(stepper.values, duration, {
                 pow: pow,
+                cameraHeight: step.camera.cameraHeight,
+                targetHeight: step.camera.targetHeight,
                 delay: 0,
                 ease: Power2.easeInOut,
                 onComplete: function() {
@@ -949,14 +955,21 @@
         function setTweens(duration) {
             var index = stepper.current;
             var step = steps[index];
-            tweenTo(index / steps.length, step.colors, duration, function() {
+            tweenTo(index / steps.length, step, duration, function() {
                 clearTweens();
                 console.log(step, stepper.values);
             });
         }
 
         $rootScope.$on('onOptionsChanged', function() {
-            setTweens(0.250);
+            var index = stepper.current;
+            var step = steps[index];
+            stepper.values.cameraHeight = step.camera.cameraHeight;
+            stepper.values.targetHeight = step.camera.targetHeight;
+            stepper.values.background.copy(new THREE.Color(step.colors.background));
+            stepper.values.lines.copy(new THREE.Color(step.colors.lines));
+            stepper.values.overLines.copy(new THREE.Color(step.colors.overLines));
+            // setTweens(0.250);
         });
 
         function setStep(index) {
@@ -1068,16 +1081,16 @@
             }
 
             gui.closed = true;
-            gui.add(options.camera, 'cameraHeight', 20.0, 100.0).onChange(onOptionsChanged);
-            gui.add(options.camera, 'targetHeight', 20.0, 100.0).onChange(onOptionsChanged);
+            gui.add(options.camera, 'cameraHeight', -20.0, 20.0).listen().onChange(onOptionsChanged);
+            gui.add(options.camera, 'targetHeight', -20.0, 20.0).listen().onChange(onOptionsChanged);
             var circlePosition = gui.addFolder('circlePosition');
-            circlePosition.add(options.circle.position, 'x', -300, 300).onChange(onOptionsChanged);
-            circlePosition.add(options.circle.position, 'y', -300, 300).onChange(onOptionsChanged);
-            circlePosition.add(options.circle.position, 'z', -300, 300).onChange(onOptionsChanged);
+            circlePosition.add(options.circle.position, 'x', -300, 300).listen().onChange(onOptionsChanged);
+            circlePosition.add(options.circle.position, 'y', -300, 300).listen().onChange(onOptionsChanged);
+            circlePosition.add(options.circle.position, 'z', -300, 300).listen().onChange(onOptionsChanged);
             var colors = gui.addFolder('colors');
-            colors.addColor(options.colors, 'background').onChange(onOptionsChanged);
-            colors.addColor(options.colors, 'lines').onChange(onOptionsChanged);
-            colors.addColor(options.colors, 'overLines').onChange(onOptionsChanged);
+            colors.addColor(options.colors, 'background').listen().onChange(onOptionsChanged);
+            colors.addColor(options.colors, 'lines').listen().onChange(onOptionsChanged);
+            colors.addColor(options.colors, 'overLines').listen().onChange(onOptionsChanged);
             gui.add(options, 'audioVolume', 0.01, 1.0).onChange(onOptionsChanged);
             gui.add(options, 'audioStrength', 10, 100).onChange(onOptionsChanged);
             gui.add(options, 'noiseStrength', 10, 100).onChange(onOptionsChanged);

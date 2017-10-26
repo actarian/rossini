@@ -317,4 +317,30 @@
 
     }]);
 
+    app.directive('scrollbar', [function() {
+        return {
+            restrict: 'A',
+            link: function(scope, element, attributes, model) {
+                var native = element[0];
+                var options = {
+                    speed: 1,
+                    damping: 0.1,
+                    overscrollDamping: 1.0,
+                    thumbMinSize: 20,
+                    continuousScrolling: true,
+                    alwaysShowTracks: false
+                };
+                var scrollbar;
+
+                function Init() {
+                    scrollbar = Scrollbar.init(native, options);
+                    scope.$watch(scrollbar.targets.content.offsetHeight, function(height) {
+                        scrollbar.update();
+                    });
+                }
+                setTimeout(Init, 100);
+            }
+        };
+    }]);
+
 }());

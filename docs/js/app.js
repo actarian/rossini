@@ -148,11 +148,13 @@
         return s * (min + (max - min) * a);
     }
 
-    app.service('AnalyserService', ['$rootScope', '$q', '$http', 'SceneOptions', function($rootScope, $q, $http, SceneOptions) {
+    app.service('AnalyserService', ['$rootScope', '$q', '$http', 'SceneOptions', 'StepperService', function($rootScope, $q, $http, SceneOptions, StepperService) {
 
         var service = this;
         var options = SceneOptions;
-        var analyser, audio;
+        var stepper = StepperService;
+
+        var analyser, audio, audioUrl;
 
         function init() {
             var source, ctx, actx = (window.AudioContext || window.webkitAudioContext);
@@ -160,8 +162,7 @@
             ctx = new actx();
             analyser = ctx.createAnalyser();
             audio = new Audio();
-            audio.src = options.audioUrl;
-            audio.controls = true;
+            // audio.controls = true;
             audio.addEventListener('canplay', function() {
                 var bufferLength;
                 console.log('audio canplay');
@@ -170,12 +171,25 @@
                 source.connect(ctx.destination);
                 analyser.fftSize = options.bands * 2;
                 bufferLength = analyser.frequencyBinCount;
-                console.log('bufferLength', bufferLength);
                 service.data = new Uint8Array(bufferLength);
+                // console.log('bufferLength', bufferLength);
                 return service.data;
             });
-            audio.volume = options.audioVolume;
-            audio.play();
+            setStep();
+        }
+
+        function setAudioUrl($audioUrl) {
+            if (audioUrl !== $audioUrl) {
+                audioUrl = $audioUrl;
+                audio.src = $audioUrl;
+                audio.volume = options.audioVolume;
+                audio.play();
+            }
+        }
+
+        function setStep() {
+            var step = stepper.getCurrentStep();
+            setAudioUrl(step.audio.url);
         }
 
         function update() {
@@ -183,6 +197,10 @@
                 analyser.getByteFrequencyData(service.data);
             }
         }
+
+        $rootScope.$on('onStepChanged', function($scope) {
+            setStep();
+        });
 
         $rootScope.$on('onOptionsChanged', function($scope) {
             if (audio) {
@@ -220,8 +238,8 @@
                 var stats, scene, camera, shadow, back, light, renderer, width, height, w2, h2, mouse = { x: 0, y: 0 };
                 var controls = null;
 
-                scope.$on('onStep', function($scope, step) {
-                    console.log('onStep', step.current);
+                scope.$on('onStepChanged', function($scope, step) {
+                    console.log('onStepChanged', step.current);
                     var circle = null;
                     var current = step.current,
                         previous = step.previous;
@@ -792,7 +810,6 @@
             points: 40, // 12
             vertices: 3600, // 1200
         },
-        audioUrl: "audio/rossini-192.mp3",
         audioVolume: 0.9,
         bands: 128,
         points: 128,
@@ -853,7 +870,10 @@
                     circle: {
                         position: new THREE.Vector3(0, 0, 0),
                         texture: 'img/rossini-01.png',
-                    }
+                    },
+                    audio: {
+                        url: "audio/07-rossini-192.mp3",
+                    },
                 };
             });
             return items;
@@ -862,8 +882,9 @@
         function init() {
             var deferred = $q.defer();
             $http.get('json/rossini.js').then(function(response) {
-                var items = getItems(); // response.data
+                var items = response.data; // getItems(); // 
                 angular.forEach(items, function(item) {
+                    item.circle.position = new THREE.Vector3().copy(item.circle.position);
                     steps.push(item);
                 });
                 console.log('StepperService.load', steps);
@@ -948,7 +969,7 @@
             options.camera.cameraHeight = step.camera.cameraHeight;
             options.camera.targetHeight = step.camera.targetHeight;
             options.circle.position.copy(step.circle.position);
-            $rootScope.$broadcast('onStep', { current: index, previous: previous });
+            $rootScope.$broadcast('onStepChanged', { current: index, previous: previous });
             setTweens(stepper.duration);
         }
 

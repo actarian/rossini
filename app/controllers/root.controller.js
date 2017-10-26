@@ -22,7 +22,6 @@
             points: 40, // 12
             vertices: 3600, // 1200
         },
-        audioUrl: "audio/rossini-192.mp3",
         audioVolume: 0.9,
         bands: 128,
         points: 128,
@@ -83,7 +82,10 @@
                     circle: {
                         position: new THREE.Vector3(0, 0, 0),
                         texture: 'img/rossini-01.png',
-                    }
+                    },
+                    audio: {
+                        url: "audio/07-rossini-192.mp3",
+                    },
                 };
             });
             return items;
@@ -92,8 +94,9 @@
         function init() {
             var deferred = $q.defer();
             $http.get('json/rossini.js').then(function(response) {
-                var items = getItems(); // response.data
+                var items = response.data; // getItems(); // 
                 angular.forEach(items, function(item) {
+                    item.circle.position = new THREE.Vector3().copy(item.circle.position);
                     steps.push(item);
                 });
                 console.log('StepperService.load', steps);
@@ -178,7 +181,7 @@
             options.camera.cameraHeight = step.camera.cameraHeight;
             options.camera.targetHeight = step.camera.targetHeight;
             options.circle.position.copy(step.circle.position);
-            $rootScope.$broadcast('onStep', { current: index, previous: previous });
+            $rootScope.$broadcast('onStepChanged', { current: index, previous: previous });
             setTweens(stepper.duration);
         }
 
